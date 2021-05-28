@@ -11,13 +11,14 @@ node index.js
 ```
 
 ## Usage
-Begin a session using `,@`. This will start a session for your server so anyone can join in!
+Begin a session using `,@`, end a session using `!*`. This will start a session for your server so anyone can join in!
 
-Send a message using the following
+### Example
 ```
+,@<RET>
 ,m<RET>
 [content]<RET>
-$
-<RET>
+$<RET>
+!*<RET>
 ```
 

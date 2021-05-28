@@ -5,10 +5,10 @@ const client = new Discord.Client();
 const token = process.env.TOKEN;
 
 let sessionTape = '';
-let messageResolved = null;
+let sessionMessage = null;
+let sessionChannel = null;
 
 // Tape of the "interactive" history
-let hasGottenMessage = false;
 let tape = [];
 
 let state = {
@@ -17,10 +17,15 @@ let state = {
     currMode: ''
 };
 
+function tapePush(line) {
+    console.log(line)
+    tape.push(line)
+};
+
 function convertMode(mode, author, v) {
     switch (mode) {
     case 'message':
-        tape.push({'type': 'message', 'author': author.username, 'body': v});  
+        tapePush({'type': 'message', 'author': author.username, 'body': v});  
         //sessionTape += `\n,m\n${v}\n$`;
         break;
     }
@@ -30,8 +35,6 @@ function renderTranscript() {
     let total = '```\n'; // ARGH MUTABILITY :(
     
     for (const m of tape) {
-        console.log(m)
-
         if (m.type == 'info') {
             total += `\n ** ${m.body}\n`;
         }
@@ -75,8 +78,12 @@ function handleCommand(msg, c) {
         //sessionTape = '```vim\n,@\n** discord-ed session started';
 
         tape = [];
-        tape.push({'type': 'info', 'body': 'discord-ed session started!'});
-        msg.channel.send(renderTranscript());
+        tapePush({'type': 'info', 'body': 'discord-ed session started!'});
+        msg.channel.send(renderTranscript())
+        .then(msg => {
+            sessionMessage = msg;
+            sessionChannel = msg.channel;
+        });
         ///   log(sessionMessage);
         
         break;
@@ -88,16 +95,43 @@ function handleCommand(msg, c) {
     }
 };
 
+function editSessionMessage(str) {
+    if (sessionMessage) {
+        sessionMessage.edit(str)
+        .catch(err => {
+            tapePush({'type': 'error', 'body': `failed to edit session msg, resetting session`})
+            resetSession(true);
+        });
+    } else {
+        tapePush({'type': 'error', 'body': `fatal error, session msg was null, resetting session`});
+        resetSession(true);
+    }
+}
+
+/**
+ * Resets the current session
+ * @param {bool} [notifyChannel=false] - should notify session channel that an error occurred and the session is being reset
+ */
+function resetSession(notifyChannel = false) {
+    if (notifyChannel) {
+        sessionChannel.send("an error has occurred and the session has been reset")
+    }
+    
+    // Reset stuff and close the "session"
+    state.currMode = '';
+    state.currVar = '';
+    
+    state.inSession = false;
+    
+    sessionMessage = null;
+    sessionChannel = null;
+
+    tapePush({'type': 'info', 'body': 'discord-ed session ended!'});
+};
+
 client.on('ready', () => console.log('logged in'));
 
 client.on('message', msg => {
-    if (msg.author.bot) {
-        if (!hasGottenMessage && messageResolved == null) {
-            messageResolved = msg;
-            hasGottenMessage = true;
-        }
-    }
-
     let command = msg.content;
 
     if (command == '$ed-render') {
@@ -115,7 +149,7 @@ client.on('message', msg => {
             // exit mode
             if (state.inSession) {
                 convertMode(state.currMode, msg.author, state.currVar);
-                messageResolved.edit(renderTranscript());
+                editSessionMessage(renderTranscript())
             
                 state.currMode = '';
                 msg.delete();
@@ -123,16 +157,9 @@ client.on('message', msg => {
             return;
         }
         else if (command == '!*') {
-            // Reset stuff and close the "session"
-            state.currMode = '';
-            state.currVar = '';
+            editSessionMessage(renderTranscript())
+            resetSession();
             
-            state.inSession = false;
-
-            tape.push({'type': 'info', 'body': 'discord-ed session ended!'});
-            messageResolved.edit(renderTranscript());
-
-            messageResolved = null;
             msg.delete();
             return;
         }
@@ -143,9 +170,6 @@ client.on('message', msg => {
             return;
         }
     }
-
-    //if (state.inSession && messageResolved != null && sessionTape.length > 1)
-    //    messageResolved.edit(sessionTape + '```');
 });
 
 client.login(token);
