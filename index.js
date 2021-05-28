@@ -95,14 +95,25 @@ function handleCommand(msg, c) {
     }
 };
 
-function editSessionMessage(str) {
+/**
+ * Edit the session message
+ * @param {string} str - New desired string of the message
+ * @param {bool} [ignoreError = false] - Ignore errors and don't reset the session
+ */
+function editSessionMessage(str, ignoreError = false) {
     if (sessionMessage) {
         sessionMessage.edit(str)
         .catch(err => {
+            if (ignoreError) {
+                return
+            }
             tapePush({'type': 'error', 'body': `failed to edit session msg, resetting session`})
             resetSession(true);
         });
     } else {
+        if (ignoreError) {
+            return
+        }
         tapePush({'type': 'error', 'body': `fatal error, session msg was null, resetting session`});
         resetSession(true);
     }
@@ -117,6 +128,9 @@ function resetSession(notifyChannel = false) {
         sessionChannel.send("an error has occurred and the session has been reset")
     }
     
+    tapePush({'type': 'info', 'body': 'discord-ed session ended!'});
+    editSessionMessage(renderTranscript(), true)
+    
     // Reset stuff and close the "session"
     state.currMode = '';
     state.currVar = '';
@@ -125,8 +139,6 @@ function resetSession(notifyChannel = false) {
     
     sessionMessage = null;
     sessionChannel = null;
-
-    tapePush({'type': 'info', 'body': 'discord-ed session ended!'});
 };
 
 client.on('ready', () => console.log('logged in'));
@@ -157,7 +169,6 @@ client.on('message', msg => {
             return;
         }
         else if (command == '!*') {
-            editSessionMessage(renderTranscript())
             resetSession();
             
             msg.delete();
